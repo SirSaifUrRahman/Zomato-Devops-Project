@@ -80,60 +80,71 @@ pipeline {
                 sh "trivy fs . > trivy.txt"
             }
         }
-        stage ("Build Docker Image") {
-            steps {
-                sh "docker build -t zomato ."
-            }
-        }
-        stage ("Tag & Push to DockerHub") {
+        stage("Build & Push to DockerHub") {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker') {
-                        sh "docker tag zomato ${DOCKER_USER}/zomato:latest "
-                        sh "docker push ${DOCKER_USER}/zomato:latest "
+                    // Securely inject DockerHub credentials (username/password)
+                    withCredentials([usernamePassword(
+                        credentialsId: "${DOCKERHUB_LABEL}", // Update this ID
+                        usernameVariable: "DOCKER_USER",
+                        passwordVariable: "DOCKER_PASS"
+                    )]) {
+                        def imageNameWithTag = "${DOCKER_USER}/zomato:latest"
+
+                        // Build Docker image
+                        def dockerImage = docker.build(imageNameWithTag)
+
+                        // Push using Docker registry with credentials
+                        docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_LABEL}") {
+                           // dockerImage.push("${IMAGE_TAG}")   // Push versioned tag
+                            dockerImage.push("latest")         // Push latest tag
+                        }
+
+                        echo "Docker image ${imageNameWithTag} built and pushed successfully."
                     }
                 }
             }
         }
+
         stage('Docker Scout Image') {
             steps {
                 script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
-                       sh 'docker-scout quickview kastrov/zomato:latest'
-                       sh 'docker-scout cves kastrov/zomato:latest'
-                       sh 'docker-scout recommendations kastrov/zomato:latest'
+                   withDockerRegistry(credentialsId: '${DOCKERHUB_LABEL}', toolName: 'docker'){
+                       sh "docker-scout quickview ${DOCKER_USER}/zomato:latest"
+                       sh "docker-scout cves ${DOCKER_USER}/zomato:latest"
+                       sh "docker-scout recommendations ${DOCKER_USER}/zomato:latest"
                    }
                 }
             }
         }
         stage ("Deploy to Container") {
             steps {
-                sh 'docker run -d --name zomato -p 3000:3000 kastrov/zomato:latest'
+                sh "docker run -d --name zomato -p 3000:3000 ${DOCKER_USER}/zomato:latest"
             }
         }
     }
-    post {
-    always {
-        emailext attachLog: true,
-            subject: "'${currentBuild.result}'",
-            body: """
-                <html>
-                <body>
-                    <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
-                    </div>
-                    <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
-                    </div>
-                    <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">URL: ${env.BUILD_URL}</p>
-                    </div>
-                </body>
-                </html>
-            """,
-            to: 'ssaifurrahman21@gmail.com',
-            mimeType: 'text/html',
-            attachmentsPattern: 'trivy.txt'
-        }
-    }
+    // post {
+    // always {
+    //     emailext attachLog: true,
+    //         subject: "'${currentBuild.result}'",
+    //         body: """
+    //             <html>
+    //             <body>
+    //                 <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
+    //                     <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
+    //                 </div>
+    //                 <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
+    //                     <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
+    //                 </div>
+    //                 <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
+    //                     <p style="color: white; font-weight: bold;">URL: ${env.BUILD_URL}</p>
+    //                 </div>
+    //             </body>
+    //             </html>
+    //         """,
+    //         to: 'ssaifurrahman21@gmail.com',
+    //         mimeType: 'text/html',
+    //         attachmentsPattern: 'trivy.txt'
+    //     }
+    // }
 }
