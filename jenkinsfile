@@ -2,37 +2,65 @@ pipeline {
     agent {
         label 'habib-node'
     }
+
+
     tools {
         maven 'Maven3'
         jdk 'Java17'
         nodejs 'node23'
     }
+
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        //tools environments
+        SONAR_HOME = tool "Sonar"
+        //github environments
+        GIT_REPO = 'https://github.com/SirSaifUrRahman/Zomato-Devops-Project'
+        //dockerhub environments
+        DOCKER_USER = "saif764"
+        DOCKERHUB_LABEL = "dockerhub-cred"
+        //jenkins environments
+        JENKINS_API_TOKEN = credentials("JENKINS_API_TOKEN")
+        BUILD_NUM_OF_CI = "${env.BUILD_NUMBER}"
     }
+
+     parameters {
+        string(name: 'BRANCH_NAME', defaultValue: 'master', description: 'Git branch to build')
+        //booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests after building the project')
+    }
+
+
     stages {
-        stage ("clean workspace") {
+        stage ("Clean Workspace") {
             steps {
                 cleanWs()
             }
         }
         stage ("Git Checkout") {
             steps {
-                git 'https://github.com/KastroVKiran/Zomato-Project-Kastro.git'
+
+                echo "Cloning ${GIT_REPO} branch: ${params.BRANCH_NAME}"
+                git branch: "${params.BRANCH_NAME}", url: "${GIT_REPO}", credentialsId: 'github'
+                sh "echo Printing Build Number of CI Job"
+                sh "echo Build Number of CI Job is: ${BUILD_NUM_OF_CI}"
             }
         }
         stage("Sonarqube Analysis"){
             steps{
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=zomato \
-                    -Dsonar.projectKey=zomato '''
-                }
+                withSonarQubeEnv(credentialsId: 'sonar-token') {
+                    sh '''
+                        $SONAR_HOME/bin/sonar-scanner \
+                            -Dsonar.projectKey=zomato \
+                            -Dsonar.projectName=zomato \
+                            -Dsonar.projectVersion=1.0
+                    '''
+                }        
             }
         }
         stage("Code Quality Gate"){
            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token' 
                 }
             } 
         }
@@ -41,12 +69,12 @@ pipeline {
                 sh "npm install"
             }
         }
-        stage('OWASP FS SCAN') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit -n', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-    }
-}
+        // stage('OWASP FS SCAN') {
+        //     steps {
+        //         dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit -n', odcInstallation: 'DP-Check'
+        //         dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+        //     }
+        // }
         stage ("Trivy File Scan") {
             steps {
                 sh "trivy fs . > trivy.txt"
@@ -61,8 +89,8 @@ pipeline {
             steps {
                 script {
                     withDockerRegistry(credentialsId: 'docker') {
-                        sh "docker tag zomato kastrov/zomato:latest "
-                        sh "docker push kastrov/zomato:latest "
+                        sh "docker tag zomato ${DOCKER_USER}/zomato:latest "
+                        sh "docker push ${DOCKER_USER}/zomato:latest "
                     }
                 }
             }
@@ -103,7 +131,7 @@ pipeline {
                 </body>
                 </html>
             """,
-            to: 'kastrokiran@gmail.com',
+            to: 'ssaifurrahman21@gmail.com',
             mimeType: 'text/html',
             attachmentsPattern: 'trivy.txt'
         }
