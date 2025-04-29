@@ -47,7 +47,7 @@ pipeline {
         }
         stage("Sonarqube Analysis"){
             steps{
-                withSonarQubeEnv(credentialsId: 'sonar-token') {
+                withSonarQubeEnv('Sonar') {
                     sh '''
                         $SONAR_HOME/bin/sonar-scanner \
                             -Dsonar.projectKey=zomato \
@@ -64,11 +64,11 @@ pipeline {
                 }
             } 
         }
-        stage("Install NPM Dependencies") {
-            steps {
-                sh "npm install"
-            }
-        }
+        // stage("Install NPM Dependencies") {
+        //     steps {
+        //         sh "npm install"
+        //     }
+        // }
         // stage('OWASP FS SCAN') {
         //     steps {
         //         dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit -n', odcInstallation: 'DP-Check'
@@ -106,45 +106,47 @@ pipeline {
             }
         }
 
-        stage('Docker Scout Image') {
-            steps {
-                script{
-                   withDockerRegistry(credentialsId: '${DOCKERHUB_LABEL}', toolName: 'docker'){
-                       sh "docker-scout quickview ${DOCKER_USER}/zomato:latest"
-                       sh "docker-scout cves ${DOCKER_USER}/zomato:latest"
-                       sh "docker-scout recommendations ${DOCKER_USER}/zomato:latest"
-                   }
-                }
-            }
-        }
+        // stage('Docker Scout Image') {
+        //     steps {
+        //         script {
+        //             sh "docker scout quickview ${DOCKER_USER}/zomato:latest"
+        //             sh "docker scout cves ${DOCKER_USER}/zomato:latest"
+        //             sh "docker scout recommendations ${DOCKER_USER}/zomato:latest"
+        //         }
+        //     }
+        // }
+
         stage ("Deploy to Container") {
             steps {
                 sh "docker run -d --name zomato -p 3000:3000 ${DOCKER_USER}/zomato:latest"
             }
         }
     }
-    // post {
-    // always {
-    //     emailext attachLog: true,
-    //         subject: "'${currentBuild.result}'",
-    //         body: """
-    //             <html>
-    //             <body>
-    //                 <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
-    //                     <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
-    //                 </div>
-    //                 <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
-    //                     <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
-    //                 </div>
-    //                 <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
-    //                     <p style="color: white; font-weight: bold;">URL: ${env.BUILD_URL}</p>
-    //                 </div>
-    //             </body>
-    //             </html>
-    //         """,
-    //         to: 'ssaifurrahman21@gmail.com',
-    //         mimeType: 'text/html',
-    //         attachmentsPattern: 'trivy.txt'
-    //     }
-    // }
+
+    
+    post {
+    always {
+        emailext(
+            attachLog: true,
+            subject: "${currentBuild.result}",
+            body: """
+                <html>
+                <body>
+                    <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
+                        <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
+                    </div>
+                    <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
+                        <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
+                    </div>
+                    <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
+                        <p style="color: white; font-weight: bold;">URL: <a href='${env.BUILD_URL}'>View Build</a></p>
+                    </div>
+                </body>
+                </html>
+            """,
+            to: 'ssaifurrahman21@gmail.com',
+            mimeType: 'text/html',
+            attachmentsPattern: 'trivy.txt'
+        )}
+    }
 }
